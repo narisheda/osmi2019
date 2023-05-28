@@ -1,0 +1,186 @@
+#Install packages
+
+options(repos="https://cloud.r-project.org")
+
+my_packages = c( "tidyverse",
+                 "dplyr",
+                 "data.table",
+                 "readr",
+                 "janitor")
+
+
+not_installed = my_packages[!(my_packages %in% installed.packages()[ , "Package"])]    
+if(length(not_installed)) install.packages(not_installed)                              
+print(paste(length(not_installed), "packages had to be installed."))
+
+
+#Load libraries
+lapply(my_packages, require, character.only = TRUE, warn.conflicts=F, quietly=T)
+
+#Import dataset and learn str()
+osmi <- read_csv("~/mental health/Mental Health/OSMI 2019 Mental Health in Tech Survey Results.csv")
+
+str(osmi)
+
+#Change names
+setnames(osmi, c('*Are you self-employed?*', 
+                 "How many employees does your company or organization have?",
+                 'Is your primary role within your company related to tech/IT?',
+                 'Has your employer ever formally discussed mental health (for example, as part of a wellness campaign or other official communication)?',
+                 'Is your anonymity protected if you choose to take advantage of mental health or substance abuse treatment resources provided by your employer?',
+                 'If a mental health issue prompted you to request a medical leave from work, how easy or difficult would it be to ask for that leave?',
+                 'Does your employer provide mental health benefits as part of healthcare coverage?',
+                 'Do you know the options for mental health care available under your employer-provided health coverage?',
+                 'Would you feel comfortable discussing a mental health issue with your direct supervisor(s)?', 
+                 'Does your employer offer resources to learn more about mental health disorders and options for seeking help?', 
+                 'Have you ever discussed your mental health with your employer?',
+                 'Overall, how much importance does your employer place on physical health?', 
+                 'Overall, how much importance does your employer place on mental health?', 
+                 'Do you have medical coverage (private insurance or state-provided) that includes treatment of mental health disorders?', 
+                 'Do you know local or online resources to seek help for a mental health issue?', 
+                 'What is your gender?'), 
+         
+                 c('self-employed',
+                   'totalEmp',
+                   'roleRelatedToTech',
+                   'employerFormalDisc',
+                   'anonymity',
+                   'askForLeaveEase',
+                   'empHealthIns',
+                   'healthInsOpt',
+                   'comfort',
+                   'empResources',
+                   'employeeDisc',
+                   'physHealthImp',
+                   'mentHealthImp',
+                   'medIns',
+                   'resources',
+                   'gender'))
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                           
+#Check renaming
+colnames(osmi)
+
+
+#Check for duplicate rows
+get_dupes(osmi)
+
+
+#Shorten answer name so it's easier to make visualizations/charts
+
+osmi[,5][osmi[,5]== 'Not eligible for coverage / NA'] <- 'Ineligible/NA'
+
+osmi[,c(5,7:10)][osmi[,c(5,7:10)]== "I don't know"] <- 'Unsure'
+
+osmi[,10][osmi[,10]== 'Neither easy nor difficult'] <- 'Neither'
+
+# In col 6, it can be confusing that there is an "NA" because it's actually meant to be a valid answer. Change to "Doesn't apply."
+
+osmi[,6][osmi[,6]== 'N/A'] <- "Doesn't apply"
+
+#Change factor levels for cols 7-9
+
+osmi[,7:9] <- lapply(osmi[,7:9], levels = c("Unsure", "No", "Yes"), factor)
+
+#Make askForLeaveEase levels and check
+
+osmi$askForLeaveEase <- factor(osmi$askForLeaveEase, levels=c(
+  "Unsure",
+  "Very easy", 
+  "Somewhat easy", 
+  "Neither", 
+  "Somewhat difficult", 
+  "Difficult"))
+
+
+#Change factors to "Y,N,M"
+osmi$comfort<- factor(osmi$comfort, levels=c("No", "Maybe", "Yes"))
+
+View(osmi)
+
+#Focus on data that is about current employer, not past one
+osmi <- osmi[, c(1:23, 26:29, 77)]
+
+osmi
+
+#Get rid of true for self-employed because we'll be more interested in how they interact with boss and employees and insurance from employees
+
+osmi <- osmi %>% filter(roleRelatedToTech == "TRUE")
+
+#Confirm change
+summary(osmi)
+
+
+#Check for categories in all columns to check for errors or misspellings
+osmiUnq <- lapply(osmi, unique)
+
+osmiUnq 
+
+#Numbers in Excel made them dates instead of # of employees. Change June 25 to 6-25 and "5-Jan" to  1-5 employees
+
+osmi[,2][osmi[,2]== '25-Jun'] <- '6-25'
+
+
+osmi[,2][osmi[,2]== '5-Jan'] <- '1-5'
+
+#Check change
+unique(osmi$totalEmp)
+
+
+#Drop columns that are all NA
+osmi <- osmi[,c(1:21,28)]
+
+str(osmi)
+
+#Check unique categories for gender
+unique(osmi$gender)
+
+#Consolidate genders while respectfully leaving diverse answers
+osmi<- osmi %>% mutate(genderUpdated = factor(gender) %>%
+  fct_recode(
+    m = "Make",
+    m = "male",
+    m= "M",
+    m= "Identify as male",
+    m="Cishet male",
+    m= "Male",
+    m= "Cis Male",
+    m= "CIS Male",
+    m= "Man",
+    m= "Masculine",
+    m= "masculino",
+    m= "Let's keep it simple and say \"male\"",
+    f= "female",
+    f= "cis woman",
+    f= "F",
+    f= "Female",
+    f= "Female (cis)",
+    f= "cis woman",
+    f= "femmina",
+    f= "Femile",
+    f= "Woman",
+    non-binary = "Non-binary", 
+    non-binary = "Non binary", 
+    non-binary = "Nonbinary"))
+     
+unique(osmi$genderUpdated)
+
+#Drop old gender col
+osmi <- osmi [,-22]
+
+#Check numeric columns for any typos (should be 0-10) or any misspellings
+summary(osmi)
+
+#Check that all columns are the right class
+osmi$totalEmp <- factor(osmi$totalEmp, levels=c("1-5", "6-25", "26-100", "100-500", "500-1000", "More than 1000"))
+
+#Check totalEmp
+unique(osmi$totalEmp)   
+
+#Check on numeric to see if they are numeric or factors
+str(osmi$physHealthImp)
+
+#Change to factor
+osmi$physHealthImp <- as.factor(osmi$physHealthImp)
+osmi$mentHealthImp <-as.factor(osmi$mentHealthImp)
+
